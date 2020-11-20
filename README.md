@@ -1,5 +1,12 @@
-# PanBody_burden_analyses
+#Analyses for the PanBody data.
 
-## SNV:
+## Burden analyses:
 
-## Indels:
+	## SNV:
+
+	## Indels:
+
+## Sigprofiler Analyses
+
+
+## Enrichment analyses

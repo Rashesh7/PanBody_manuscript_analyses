@@ -1,0 +1,125 @@
+---
+title: "Trio_comparison"
+output: html_notebook
+---
+
+#PanBody data clonal burden
+```{r}
+#Modity the path to the per sample data table from the publication
+Mutations_avgCov_per_sample <- read.table("./Mutations_per_sample-HDP-Sigpro_signatures_withinfo.txt", header=T, check.names=FALSE, sep="\t", quote = "")
+
+#Just use clonal mutations
+Mutations_avgCov_per_sample_testes <- Mutations_avgCov_per_sample[which(Mutations_avgCov_per_sample$TissueType4 == "testis_seminiferous_tubule"),]
+Mutations_avgCov_per_sample_testes_clonal <- Mutations_avgCov_per_sample_testes[which(!is.na(Mutations_avgCov_per_sample_testes$Burden_clonal2)),]
+
+#Correct for callable genome size
+Mutations_avgCov_per_sample_testes_clonal["Clonal_Mutations_per_genome2_haploid"] <- Mutations_avgCov_per_sample_testes_clonal["Clonal_Mutations_per_genome2"]/2
+
+# Calculate sensitivity used in the age correlation model
+Mutations_avgCov_per_sample_testes_clonal$Sensitivity <- Mutations_avgCov_per_sample_testes_clonal$SBS_sample.median.vaf*Mutations_avgCov_per_sample_testes_clonal$Seq_X
+
+mod_mixedeffect <- lmer(as.integer(Clonal_Mutations_per_genome2_haploid) ~ as.integer(Age)+offset(Sensitivity) + (1|DonorID), data = Mutations_avgCov_per_sample_testes_clonal, REML = FALSE)
+print(summ(mod_mixedeffect))
+anova(mod_mixedeffect, test="Chisq")
+plot(mod_mixedeffect)
+coef(mod_mixedeffect)
+
+coeffecient <- coef(mod_mixedeffect)
+intercept <- round(mean(coeffecient$DonorID$`(Intercept)`), digits = 0)
+slope <- round(mean(coeffecient$DonorID$`as.integer(Age)`), digits = 2)
+textlab_lmer_model <- paste("Clonal_Mutations_per_genome2 = ",intercept," + ", slope,"*Age", sep = "")
+print(textlab_lmer_model)
+confint(mod_mixedeffect, 'as.integer(Age)', level=0.95)
+```
+
+#Decode_DNMS
+````{r}
+#deCODE mutation counts 
+trio_dnms <- read.table("./decode_DNMs_withMetadata.txt", header=T, check.names=FALSE, sep="\t", quote = "")
+
+#deCODE paper mentions paternal DNMs were 80.4% of total DNMs
+trio_dnms["Paternal_Count"] <- round(trio_dnms["Count"]*0.804, 0)
+y_max <- max(trio_dnms$Paternal_Count)+50
+mod_trio <- lm(as.integer(Paternal_Count) ~ as.integer(Fathers_age_at_conception), data = trio_dnms)
+print(summ(mod_trio))
+
+anova(mod_trio, test="Chisq")
+plot(mod_trio)
+coef(mod_trio)
+
+coeffecient <- coef(mod_trio)
+intercept <- round(coeffecient["(Intercept)"], digits = 0)
+slope <- round(coeffecient["as.integer(Fathers_age_at_conception)"], digits = 2)
+textlab_lmer_model_trio_paternal <- paste("Paternal_Trio_DNMs = ",intercept," + ", slope,"*Age", sep = "")
+
+print(textlab_lmer_model_trio_paternal)
+confint.default(mod_trio,'as.integer(Fathers_age_at_conception)',level=0.95)
+```
+
+#Plot Figure 4b from publication
+```{r}
+y_max <- max(Mutations_avgCov_per_sample_testes_clonal$Clonal_Mutations_per_genome2_haploid)+50
+
+p <- ggplot()+  geom_pointrange(data=Mutations_avgCov_per_sample_testes_clonal, aes(x = Age, y = as.numeric(as.character(Clonal_Mutations_per_genome2_haploid)), group=DonorID), color="#009E73" , shape=19, stat = "summary", fun.min = function(z) {quantile(z,0.25)}, fun.max = function(z) {quantile(z,0.75)},fun = median, fill="black") + geom_smooth(data=Mutations_avgCov_per_sample_testes_clonal , aes(x = as.numeric(Age), y = Clonal_Mutations_per_genome2_haploid),color="#009E73",method=lm, se=T) + geom_point(data=trio_dnms,aes(x = Fathers_age_at_conception, y = Paternal_Count), color="#CC79A7") + geom_smooth(data=trio_dnms , aes(x = as.numeric(Fathers_age_at_conception), y = Paternal_Count),color="#CC79A7",method=lm, se=T) + xlab("Age(years)") + ylab("Number of SNVs") + theme_pubr()+theme(legend.position = "right", legend.title=element_text(size=10), legend.text=element_text(size=8), legend.direction = "vertical")+guides(fill=guide_legend(ncol=1,byrow=TRUE)) + coord_cartesian(xlim = c(0,100), ylim = c(0,y_max), expand = FALSE) + annotate("text", x = 1, y = (y_max-10), label = print(textlab_lmer_model), color="black", size = 4, parse=FALSE, hjust=0) + annotate("text", x = 1, y = (y_max-20), label = print(textlab_lmer_model_trio_paternal), color="black", size = 4, parse=FALSE, hjust=0)
+
+p 
+ggsave(p,filename = "./Mutation_burden_Haploid-DecodeTrioDNMs_Paternal_comparisions_clonal.png",dpi=300, units="in",width=7, height=5)
+
+```
+
+
+#Model to check difference between Haploid mutation burden and Paternal DNMs 
+```{r}
+Mutations_avgCov_per_sample_testes_median <- as.data.frame(Mutations_avgCov_per_sample_testes_clonal[c("DonorID", "Age")])
+rownames(Mutations_avgCov_per_sample_testes_median) <- NULL
+
+for(i in unique(Mutations_avgCov_per_sample_testes_median$DonorID)){
+  Mutations_avgCov_per_sample_testes_median[which(Mutations_avgCov_per_sample_testes_median$DonorID == i),"Clonal_Mutations_per_genome2_median"] <- median(Mutations_avgCov_per_sample_testes_clonal[which(Mutations_avgCov_per_sample_testes_clonal$DonorID == i),"Clonal_Mutations_per_genome2"])
+  Mutations_avgCov_per_sample_testes_median[which(Mutations_avgCov_per_sample_testes_median$DonorID == i),"Clonal_Mutations_per_genome2_haploid_median"] <- median(Mutations_avgCov_per_sample_testes_clonal[which(Mutations_avgCov_per_sample_testes_clonal$DonorID == i),"Clonal_Mutations_per_genome2_haploid"])
+}
+
+
+trio_dnms <- trio_dnms[c("Proband_nr", "Fathers_age_at_conception", "Paternal_Count")]
+
+
+Mutations_avgCov_per_sample_testes_median_tmp <- Mutations_avgCov_per_sample_testes_median[c("DonorID", "Age", "Clonal_Mutations_per_genome2_haploid_median")]
+trio_dnms_tmp <- trio_dnms[c("Proband_nr", "Fathers_age_at_conception", "Paternal_Count")]
+Mutations_avgCov_per_sample_testes_median_tmp["Dataset"] <- "RR"
+trio_dnms_tmp["Dataset"] <- "Decode Trio Paternal DNMs"
+colnames(trio_dnms_tmp) <- colnames(Mutations_avgCov_per_sample_testes_median_tmp)
+
+haploid_PaternalDNMs <- rbind(trio_dnms_tmp, Mutations_avgCov_per_sample_testes_median_tmp)
+colnames(haploid_PaternalDNMs) <- c("DonorID", "Age", "Mutations", "Dataset")
+mod_paternaltrio_haploid <- lm(as.integer(Mutations) ~ as.integer(Age)*Dataset , data = haploid_PaternalDNMs)
+print(summ(mod_paternaltrio_haploid))
+summary(mod_paternaltrio_haploid)
+coef(mod_paternaltrio_haploid)
+confint(mod_paternaltrio_haploid, 'as.integer(Age)', level=0.95)
+
+## Slope is not different. Intercept is significantly different.(p-value 0.769 and 2.0 x 10^-18 respectively )
+## Thus Haploid burden rate is similar to Paternal DNM rate from Trios
+```
+
+
+#Models to check if significance of random slope and random inercept
+```{r}
+mixedmod_paternaltrio_haploid <- lmer(as.integer(Mutations) ~ Age + (1+Age|Dataset)  , data = haploid_PaternalDNMs, REML = FALSE)
+print(summ(mixedmod_paternaltrio_haploid))
+summary(mixedmod_paternaltrio_haploid)
+anova(mixedmod_paternaltrio_haploid, test="Chisq")
+plot(mixedmod_paternaltrio_haploid)
+coef(mixedmod_paternaltrio_haploid)
+confint(mixedmod_paternaltrio_haploid, 'Age', level=0.95)
+```
+
+```{r}
+#Since we saw that only intercepts are significantly different but slopes are same, using only random intercepts for the below method
+
+mixedmod_paternaltrio_haploid_ranIntercept <- lmer(as.integer(Mutations) ~ Age + (1|Dataset)  , data = haploid_PaternalDNMs, REML = FALSE)
+print(summ(mixedmod_paternaltrio_haploid_ranIntercept))
+summary(mixedmod_paternaltrio_haploid_ranIntercept)
+anova(mixedmod_paternaltrio_haploid_ranIntercept, test="Chisq")
+plot(mixedmod_paternaltrio_haploid_ranIntercept)
+coef(mixedmod_paternaltrio_haploid_ranIntercept)
+anova(mixedmod_paternaltrio_haploid, mixedmod_paternaltrio_haploid_ranIntercept)
+```

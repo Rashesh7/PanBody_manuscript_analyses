@@ -1,0 +1,126 @@
+---
+title: "Indels Mutation Burden vs Age"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+#Load Libraries
+```{r}
+library("ggplot2")
+library("reshape2")
+library("RColorBrewer")
+library("plyr")
+library("dplyr")
+library("lme4")
+library("nlme")
+library(lmerTest)
+library("tidyverse")
+library("ggpubr")
+library("gridExtra")
+library("cowplot")
+library(stats)
+library(MASS)
+library(jtools)
+library("patchwork")
+library("ggthemes")
+library(viridis)
+options(scipen = 999)
+theme_set(theme_cowplot())
+
+```
+
+#Load Data
+```{r}
+
+mycolors <- c("PD42034(33.6)" = "#A6CEE3", "PD42563(38)" = "#3385BB", "PD40744(30)" = "#84BF96", "PD46269(22)" = "#6DBD57", "PD42036(28.3)" = "#7F9D55", "PD42569(44)" = "#F57C7C", "PD42566(48)" = "#E42622", "PD42565/PD43851(47)" = "#FBB268", "PD40745/PD42564(46)" = "#FE8D19", "PD40746/PD42568(71)" = "#DE9E83", "PD28690(78)" = "#977899", "PD43727(60.6)" = "#F3E587", "PD43726(82.8)" = "#B15928", "PD42034" = "#A6CEE3", "PD42563" = "#3385BB", "PD40744" = "#84BF96", "PD46269" = "#6DBD57", "PD42036" = "#7F9D55", "PD42569" = "#F57C7C", "PD42566" = "#E42622", "PD42565/PD43851" = "#FBB268", "PD40745/PD42564" = "#FE8D19", "PD40746/PD42568" = "#DE9E83", "PD28690" = "#977899", "PD43727" = "#F3E587", "PD43726" = "#B15928", "PD43850" = "#EED393", "PD43850(54)" = "#EED393")
+
+Mutations_avgCov_per_sample_withpanBody <- read.table("/Users/rs30/volumes/rs30_lustre/rs30-117/Pan_body/Mutational_burden/Mutations_per_sample_used_for_models.txt", header=T, check.names=FALSE, sep="\t", quote = "")
+
+load("/Users/rs30/volumes/rs30_lustre/rs30-117/Pan_body/Final_Files/sorting_list.RData")
+
+Mutations_avgCov_per_sample_withpanBody$Sensitivity <- Mutations_avgCov_per_sample_withpanBody$sample.median.vaf*Mutations_avgCov_per_sample_withpanBody$Seq_X
+unique(Mutations_avgCov_per_sample_withpanBody$DonorID)
+
+#To exclude samples with <15X coverage
+Mutations_avgCov_per_sample_withpanBody <- Mutations_avgCov_per_sample_withpanBody[which(Mutations_avgCov_per_sample_withpanBody$Seq_X > 15),]
+
+Mutations_avgCov_per_sample_withpanBody_Testis <- Mutations_avgCov_per_sample_withpanBody[which(Mutations_avgCov_per_sample_withpanBody$TissueType1 %in%  c("testis")),]
+unique(Mutations_avgCov_per_sample_withpanBody_Testis$TissueType1)
+
+
+Mutations_avgCov_per_sample_withpanBody_colon <- Mutations_avgCov_per_sample_withpanBody[which(Mutations_avgCov_per_sample_withpanBody$TissueType1 %in%  c("colon")),]
+unique(Mutations_avgCov_per_sample_withpanBody_colon$TissueType1)
+
+Mutations_avgCov_per_sample_withpanBody_Testis_clonal <- Mutations_avgCov_per_sample_withpanBody_Testis[which(!is.na(Mutations_avgCov_per_sample_withpanBody_Testis$Indel_Burden_clonal2)),]
+unique(Mutations_avgCov_per_sample_withpanBody_Testis_clonal$DonorID)
+
+
+```
+
+```{r}
+## Linear model
+mod_withVAFseqX_indel <- lm(as.integer(Clonal_Indels_per_genome2) ~ as.integer(Age)+Sensitivity , data = Mutations_avgCov_per_sample_withpanBody_Testis_clonal)
+a <- signif(coef(mod_withVAFseqX_indel)[1], digits = 2)
+b <- signif(coef(mod_withVAFseqX_indel)[2], digits = 2)
+c <- signif(coef(mod_withVAFseqX_indel)[3], digits = 2)
+textlab_VAFseqX_indel <- paste("Indels_per_genome = ",a," + ", b,"*Age", sep = "")
+print(summ(mod_withVAFseqX_indel))
+summary(mod_withVAFseqX_indel)
+anova(mod_withVAFseqX_indel, test="Chisq")
+coef(mod_withVAFseqX_indel)
+plot(mod_withVAFseqX_indel)
+print(textlab_VAFseqX_indel)
+confint(mod_withVAFseqX_indel, 'as.integer(Age)', level=0.95)
+```
+
+
+
+```{r}
+## Linear Mixed effect model
+mod_withVAF_mixedeffect_SampleID_indel <- lmer(as.integer(Clonal_Indels_per_genome2) ~ as.integer(Age)+offset(Sensitivity) + (1|DonorID), data = Mutations_avgCov_per_sample_withpanBody_Testis_clonal, REML = FALSE)
+print(summ(mod_withVAF_mixedeffect_SampleID_indel))
+anova(mod_withVAF_mixedeffect_SampleID_indel, test="Chisq")
+plot(mod_withVAF_mixedeffect_SampleID_indel)
+coef(mod_withVAF_mixedeffect_SampleID_indel)
+
+coeffecient <- coef(mod_withVAF_mixedeffect_SampleID_indel)
+intercept <- signif(mean(coeffecient$DonorID$`(Intercept)`), digits = 2)
+slope <- signif(mean(coeffecient$DonorID$`as.integer(Age)`), digits = 2)
+textlab_lmer_model_indel <- paste("Indels_per_genome = ",intercept," + ", slope,"*Age", sep = "")
+
+print(textlab_lmer_model_indel)
+confint(mod_withVAF_mixedeffect_SampleID_indel, 'as.integer(Age)', level=0.95)
+```
+
+
+```{r}
+## Generalized model with Poisson
+mod_withVAF_glmer_SampleID_indel <- glmer(as.integer(Clonal_Indels_per_genome2) ~ as.integer(Age) + offset(log(Sensitivity)) + (1|DonorID)  , data = Mutations_avgCov_per_sample_withpanBody_Testis_clonal, family = poisson(link = "log"))
+plot(mod_withVAF_glmer_SampleID_indel)
+anova(mod_withVAF_glmer_SampleID_indel, test="Chisq")
+summary(mod_withVAF_glmer_SampleID_indel)
+coef(mod_withVAF_glmer_SampleID_indel)
+
+coeffecient <- coef(mod_withVAF_glmer_SampleID_indel)
+intercept <- signif(exp(mean(coeffecient$`DonorID`$`(Intercept)`)), digits = 2)
+slope <- signif(exp(mean(coeffecient$`DonorID`$`as.integer(Age)`)), digits = 2)
+textlab_glmer_model_indels <- paste("Indels_per_genome = ",intercept," + ", slope,"*Age", sep = "")
+print(textlab_glmer_model_indels)
+```
+
+
+```{r}
+
+
+Mutations_avgCov_per_sample_withpanBody_Testis_clonal$DonorID <- factor(Mutations_avgCov_per_sample_withpanBody_Testis_clonal$DonorID, levels = age_sort$DonorID)
+
+y_max = max(Mutations_avgCov_per_sample_withpanBody_Testis_clonal$Clonal_Indels_per_genome2)+5
+
+p_model_indel <- ggplot()+ geom_boxplot(data=Mutations_avgCov_per_sample_withpanBody_Testis_clonal, aes(x = Age, y = Clonal_Indels_per_genome2, fill=DonorID),width=1.5, outlier.shape = NA,position=position_dodge2()) + geom_dotplot(data=Mutations_avgCov_per_sample_withpanBody_Testis_clonal, aes(x = Age, y = Clonal_Indels_per_genome2, fill=DonorID), binaxis='y', stackdir='center', position=position_dodge(1.5),dotsize = 0.25)+ stat_summary(fun.y=mean, colour="darkred", geom="point", shape=19, size=1,show.legend = FALSE) + geom_smooth(data=Mutations_avgCov_per_sample_withpanBody_Testis_clonal, aes(x = as.numeric(Age), y = Clonal_Indels_per_genome2),color="black",method=lm, se=T) +xlab("Age(years)") + ylab("Number of Mutations(INDELs)") + scale_fill_manual(values = mycolors, name="Sample")  + theme_pubr()+theme(legend.position = "right", legend.title=element_text(size=10), legend.text=element_text(size=8), legend.direction = "vertical")+guides(fill=guide_legend(ncol=1,byrow=TRUE))+annotate("text", x = 1, y = (y_max-2), label = print(textlab_lmer_model_indel), color="black", size = 4, parse=FALSE, hjust=0)+coord_cartesian(xlim=c(0,100), ylim=c(0,y_max),  expand=FALSE)
+
+p_model_indel
+
+
+```
+
