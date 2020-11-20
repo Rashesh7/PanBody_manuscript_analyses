@@ -1,10 +1,10 @@
-#Analyses for the PanBody data.
+# Analyses for the PanBody data.
 
 ## Burden analyses:
 
-	## SNV:
+	SNV:
 
-	## Indels:
+	Indels:
 
 ## Sigprofiler Analyses
 
