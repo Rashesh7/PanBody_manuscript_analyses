@@ -43,33 +43,33 @@ Functions to generate variants and callable regions for each dataset. These are 
 load_VCF <- function(dataset, surveyed = NA) {
   #Pop variants from gnomAD
   if(dataset == "PopVars") {
-    gnomadVCF <- read_vcfs_as_granges(paste0(path,"variantVCFs/PopVars/gnomad.genomes.r2.1.1.snps.filtered.singletons.vcf"), "gnomad", ref_genome, check_alleles=T)
+    gnomadVCF <- read_vcfs_as_granges(paste0(path,"variantVCFs/PopVars/gnomad.genomes.r2.1.1.snps.filtered.singletons.vcf"), "gnomad", ref_genome)
     return(gnomadVCF)
   }
   #Testes by individual
   if(dataset == "Testes") {
     testesIndivFiles <- list.files(paste0(path, "variantVCFs/TestesNormal"), pattern = ".vcf.gz", full.names = TRUE)
     testesIndivSamples <-  str_remove(list.files(paste0(path, "variantVCFs/TestesNormal"), pattern = ".vcf.gz"), ".vcf.gz")
-    testesIndivVCF <- read_vcfs_as_granges(testesIndivFiles, testesIndivSamples, ref_genome, check_alleles=T)
+    testesIndivVCF <- read_vcfs_as_granges(testesIndivFiles, testesIndivSamples, ref_genome)
     return(testesIndivVCF)
   }
   #Colon by individual
   if(dataset == "Colon") {
     colonIndivFiles <- list.files(paste0(path, "variantVCFs/Colon"), pattern = ".vcf.gz", full.names = TRUE)
     colonIndivSamples <-  str_remove(list.files(paste0(path, "variantVCFs/Colon"), pattern = ".vcf.gz"), ".vcf.gz")
-    colonIndivVCF <- read_vcfs_as_granges(colonIndivFiles, colonIndivSamples, ref_genome, check_alleles=T)
+    colonIndivVCF <- read_vcfs_as_granges(colonIndivFiles, colonIndivSamples, ref_genome)
     return(colonIndivVCF)
   }
   #Trios from DeCode
   if(dataset == "Trios") {
-    triosVCF <- read_vcfs_as_granges(paste0(path, "variantVCFs/Trios/trios_decode.vcf"), "Trio_data", ref_genome, check_alleles=T)
+    triosVCF <- read_vcfs_as_granges(paste0(path, "variantVCFs/Trios/trios_decode.vcf"), "Trio_data", ref_genome)
     return(triosVCF)
   }
   #PanBody Patient muts
   if(dataset == "PanBody") {
     panBodyFiles <- list.files(paste0(path, "variantVCFs/PanBody"), pattern = ".vcf.gz" , full.names = TRUE)
     panBodySamples <- str_remove(list.files(paste0(path, "variantVCFs/PanBody"), pattern = ".vcf.gz"), ".vcf.gz")
-    panBodyVCF <- read_vcfs_as_granges(panBodyFiles, panBodySamples, ref_genome, check_alleles=T)
+    panBodyVCF <- read_vcfs_as_granges(panBodyFiles, panBodySamples, ref_genome)
     return(panBodyVCF)
   }
 }
@@ -226,7 +226,7 @@ intersect_with_regionCustom = function(vcf, surveyed, region, regionName, triRat
         stop(paste("The chromosome names (seqlevels) of the surveyed and",
                     "the region GRanges object do not match."))
     # Intersect genomic region and surveyed region
-    surveyed_region = intersect(surveyed, region, ignore.strand = TRUE)
+    surveyed_region = GenomicRanges::intersect(surveyed, region, ignore.strand = TRUE)
     surveyed_region_length = sum(width(surveyed_region))
     
     # Find which mutations lie in surveyed genomic region
@@ -245,7 +245,7 @@ intersect_with_regionCustom = function(vcf, surveyed, region, regionName, triRat
     
     complement = vector()
     complement["A"] = "T"; complement["C"] = "G"; complement["G"] = "C"; complement["T"] = "A";	
-    tri_freqs_summary <- as.tibble(tri_freqs) %>% 
+    tri_freqs_summary <- as_tibble(tri_freqs) %>% 
       dplyr::summarise(across(.cols = everything(), sum)) %>% 
       pivot_longer(cols = everything(), names_to = "context0", values_to = "count") %>% 
       #Convert to pyr reference
@@ -408,7 +408,7 @@ surveyed_list <- c(colonSurveyed, testesSurveyed, triosSurveyed, panBodySurveyed
 p_corrected <- (0.05/length(unique(tissues)))
 
 #Number of simulations for CIs
-n_sims = 10000
+n_sims = 100
 
 #Should calculate sigs
 useSigs = T
@@ -419,6 +419,7 @@ useSigs = T
 ```{r triRateTables}
 #Tri Rate Tables
 triRateTable <- loadTriRate(VCFs, surveyed_list, tissues)
+
 write_tsv(triRateTable, paste0(plotsPath, "triRateTable.tsv"))
 p_triRateTable <- triRateTable %>% 
   ggplot(aes(x = context, y = rate, color = tissue)) +
@@ -535,7 +536,7 @@ strand_bias <- strand_bias_test(strand_counts) %>%
   mutate(significant = if_else(p_poisson < p_corrected, "*", "")) %>% 
   mutate(logRatio = log2(transcribed/untranscribed))
 
-write_tsv(strand_bias, path = paste0(plotsPath, 'strand_bias.tsv'))
+write_tsv(strand_bias, file = paste0(plotsPath, 'strand_bias.tsv'))
 
 ```
 
@@ -560,17 +561,17 @@ names(regions_list) = c("Early", "Intermediate", "Late")
 
 #Adjusted rep timing
 mainRepDist <- genomic_distributionCustom(VCFs, surveyed_list, regions_list, triRateTable, tissues, addSigs = useSigs, probabilityDF)
-write_tsv(mainRepDist, path = paste0(plotsPath, 'repTimingIndiv.tsv'))
+write_tsv(mainRepDist, file = paste0(plotsPath, 'repTimingIndiv.tsv'))
 
 repTimingAdjusted <- mainRepDist %>% 
   group_by(region, tissueType) %>% 
   dplyr::summarise(across(where(is.numeric),sum), .groups = "drop") %>% 
   mutate(by = tissueType) %>% 
   select(by, region, n_muts, surveyed_length, surveyed_region_length, observed, expected)
-write_tsv(repTimingAdjusted, path = paste0(plotsPath, 'repTimingSummarized.tsv'))
+write_tsv(repTimingAdjusted, file = paste0(plotsPath, 'repTimingSummarized.tsv'))
 
 repTimingCIs <- calculateCIs(repTimingAdjusted, VCFs, regions_list, tissues, n_sim = n_sims)
-write_tsv(repTimingCIs, path = paste0(plotsPath, 'repTimingCIs.tsv'))
+write_tsv(repTimingCIs, file = paste0(plotsPath, 'repTimingCIs.tsv'))
 ```
 
 ## Introns vs Exons
@@ -602,16 +603,16 @@ exonicRegions_list[[3]] <- intergenic
 names(exonicRegions_list) <- c("exonic", "intronic", "intergenic")
 
 exonicDist <- genomic_distributionCustom(VCFs, surveyed_list, exonicRegions_list, triRateTable, tissues, addSigs = useSigs, probabilityDF)
-write_tsv(exonicDist, path = paste0(plotsPath, 'exonicIndiv.tsv'))
+write_tsv(exonicDist, file = paste0(plotsPath, 'exonicIndiv.tsv'))
 
 exonicAdjusted <- exonicDist %>% 
   group_by(region, tissueType) %>% 
   dplyr::summarise(across(where(is.numeric),sum), .groups = "drop") %>% 
   mutate(by = tissueType)
-write_tsv(exonicAdjusted, path = paste0(plotsPath, 'exonicSummarized.tsv'))
+write_tsv(exonicAdjusted, file = paste0(plotsPath, 'exonicSummarized.tsv'))
 
 exonicCIs <- calculateCIs(exonicAdjusted, VCFs, exonicRegions_list, tissues, n_sim = n_sims)
-write_tsv(exonicCIs, path = paste0(plotsPath, 'exonicCIs.tsv'))
+write_tsv(exonicCIs, file = paste0(plotsPath, 'exonicCIs.tsv'))
 ```
 
 # Expr/Meth Enrich
@@ -628,7 +629,8 @@ gtexMedian <- read_tsv(paste0(path, "expression/GTEx_Analysis_2017-06-05_v8_RNAS
   left_join(biomart, by = "gene") %>% 
   #Drop non-standard chromosomes
   filter(chr %in% c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","X")) %>% 
-  drop_na()
+  drop_na() %>% 
+  distinct()
 
 txPanBody <- gtexMedian %>% 
   mutate(length = txEnd - txStart) %>% 
@@ -676,8 +678,120 @@ for(etissue in tissuesWithExprData) {
   exprEnrichDF <- bind_rows(exprEnrichDF, exprEnrichCIs)
 }
 
-write_tsv(exprEnrichDF, path = paste0(plotsPath, 'exprSummarizedCIs.tsv'))
+write_tsv(exprEnrichDF, file = paste0(plotsPath, 'exprSummarizedCIs.tsv'))
 ```
+
+## Xia Germline expr
+```{r xiaGermExpr, fig.height=4, fig.width=7}
+
+#Fix genes formatted as dates
+fixDatesTable <- tibble(gene_name = c("01-Dec","01-Sep","02-Sep","03-Mar","03-Sep","04-Mar","04-Sep","05-Mar","05-Sep","06-Mar","06-Sep","07-Mar","07-Sep","08-Mar","08-Sep","09-Mar","09-Sep","10-Mar","10-Sep","11-Mar","11-Sep","12-Sep","14-Sep"),
+                        fix = c("DEC1","SEPT1","SEPT2","MARCH3","SEPT3","MARCH4","SEPT4","MARCH5","SEPT5","MARCH6","SEPT6","MARCH7","SEPT7","MARCH8","SEPT8","MARCH9","SEPT9","MARCH10","SEPT10","MARCH11","SEPT11","SEPT12","SEPT14"))
+
+#HGNC IDs for all protein coding genes
+ensembl_IDs <- read_tsv(paste0(path, "expression/hgncIDs2.txt"), col_types = 'ccccic', skip = 1, 
+                    col_names = c('hgnc_id', 'gene_name', 'alias_symbol','old_symbol', 'entrez_gene_id', 'ensembl_gene_id')) %>% 
+  select(gene_name, ensembl_gene_id) %>% 
+  distinct()
+
+germCellExpr <- read_csv(paste0(path, "expression/expr_level_groups.csv"), col_types = cols(.default = "c")) %>% 
+  pivot_longer(1:9, names_to = "group", values_to = "gene_name") %>% 
+  drop_na() %>% 
+  left_join(fixDatesTable, by ="gene_name") %>% 
+  mutate(gene_name = if_else(gene_name %in% fixDatesTable$gene_name, fix, gene_name)) %>% 
+  select(group, gene_name) %>% 
+  #combine 7 and 8
+  mutate(group = if_else(group %in% c("Group_7", "Group_8"), "Group_7+8", group))
+
+geneCoords0 <- gtexMedian %>% 
+  select(gene, gene_name = Description) %>% 
+  left_join(germCellExpr) %>%
+  drop_na() %>% 
+  #Join hg19 coords
+  left_join(biomart, by = "gene") %>% 
+  #Drop non-standard chromosomes
+  filter(chr %in% c("1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","X")) %>% 
+  drop_na() %>% 
+  mutate(length = txEnd - txStart) %>% 
+  mutate(tissue = "testis")
+
+groupSizes <- geneCoords0 %>% 
+  group_by(group) %>% 
+  summarize(n_genes = n()) %>% 
+  mutate(group = fct_relevel(group, c("Group_Unexp","Group_1","Group_2","Group_3","Group_4","Group_5","Group_6","Group_7+8"))) %>% 
+  arrange(group) 
+
+
+#Add same expr values for popVars + trioDNMS
+geneCoords <- geneCoords0 %>% 
+  bind_rows(geneCoords0 %>% mutate(tissue = "trio_DNMs")) %>% 
+  bind_rows(geneCoords0 %>% mutate(tissue = "pop_vars"))
+
+exprDataXia <- c("testis","trio_DNMs", "pop_vars")
+tissuesWithExprDataXia <- exprDataXia[exprDataXia %in% tissues]
+
+exprEnrichXia <- tibble()
+for(etissue in tissuesWithExprDataXia) {
+  expr_list=list()
+  for(eBin in c("Group_Unexp","Group_1","Group_2","Group_3","Group_4","Group_5","Group_6","Group_7+8")){
+    exprDF <- geneCoords %>% filter(group == eBin & tissue == etissue)
+    expr_gr <- GRanges(exprDF$chr, IRanges(start=exprDF$txStart,end=exprDF$txEnd), strand = exprDF$strand)
+    seqlevelsStyle(expr_gr) <- "UCSC"
+    expr_list[[eBin]] <- expr_gr
+  }
+  names(expr_list) = c("Group_Unexp","Group_1","Group_2","Group_3","Group_4","Group_5","Group_6","Group_7+8")
+  enrich <- genomic_distributionCustom(VCFs[etissue == tissues], surveyed_list[etissue == tissues], expr_list, triRateTable, tissues[etissue == tissues], addSigs = useSigs, probabilityDF)
+  
+  #Summarise across individuals
+  exprEnrichAdjusted <- enrich %>% 
+    group_by(region, tissueType) %>%
+    dplyr::summarise(across(where(is.numeric),sum), .groups = "drop") %>%
+    mutate(by = tissueType)
+  
+  #Add CIs
+  exprEnrichCIsXia <- calculateCIs(exprEnrichAdjusted, VCFs[etissue == tissues], expr_list, tissues[etissue == tissues], n_sim = n_sims)
+  #Add tissue to master DF
+  exprEnrichXia <- bind_rows(exprEnrichXia, exprEnrichCIsXia)
+}
+
+write_tsv(exprEnrichXia, file = paste0(plotsPath, 'exprSummarizedXia.tsv'))
+
+exprEnrichXia <- read_tsv(paste0(plotsPath, 'exprSummarizedXiaPopVars.tsv'))
+pExprXia <- exprEnrichXia %>% 
+  mutate(by = fct_relevel(by, c("trio_DNMs", "pop_vars", "testis"))) %>% 
+  mutate(region = fct_relevel(region, c("Group_Unexp","Group_1","Group_2","Group_3","Group_4","Group_5","Group_6","Group_7+8"))) %>% 
+  ggplot(aes(x= region, y = observed/expected, color = region, group = 1)) +
+  geom_hline(yintercept = 1, colour = "grey") +
+  geom_errorbar(aes(ymin=lowerCI/expected, ymax=upperCI/expected), width=.2, color = "black") +
+  geom_point(alpha = 0.75) +
+  facet_grid(~by, switch = "x") +
+  scale_color_manual(values = c('#deebf7','#c6dbef','#9ecae1','#6baed6','#4292c6','#2171b5','#08519c','#08306b')) +
+  geom_line(color = "darkgrey", linetype = "dashed") +
+  labs(colour = "Expression Group") +
+  ylab("obs/exp") +
+  ylim(0.45, 1.60) +
+  theme_bw() +
+  theme(#axis.text.x = element_text(size = 8, angle = 45, vjust = 0.5),
+        axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_blank(),
+        strip.background = element_blank(), #remove background for facet labels
+        strip.text = element_text(angle = 45, vjust = 0.5),
+        strip.placement="outside",
+        panel.spacing = unit(0, "lines"), #remove space between facets
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+pExprXia
+
+png(paste0(plotsPath, 'germExprXia.png'), height=4, width=6, units = "in", res = 300)
+pExprXia 
+dev.off()
+
+pdf(paste0(plotsPath, 'germExprXia.pdf'), height=4, width=6)
+pExprXia 
+dev.off()
+
+```
+
 
 # Summary Figure
 ## Point
